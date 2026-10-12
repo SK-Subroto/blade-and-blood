@@ -1,0 +1,24 @@
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# Firebase deploy cache and logs (.firebaserc and firebase.json are kept)
+.firebase/
+firebase-debug.log*
+firebase-debug.*.log*
+
+# GitLab Pages output (built by CI)
+public/
+
+# Node, in case tooling is added later
+node_modules/
+
+# Logs and temporary files
+*.log
+*.tmp

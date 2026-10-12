@@ -1,0 +1,1775 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+	<title>Blade &amp; Blood</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet" />
+	<style>
+		/* Bengali letters: Baloo Da 2 (SIL Open Font License, src/fonts/OFL.txt), only for Bengali
+		   characters, so English text keeps the pixel fonts. size-adjust makes Bengali match the
+		   visual size of the pixel font it falls back from. */
+		@font-face {
+			font-family: 'BB Bangla Display';
+			src: url('src/fonts/baloo-da-2-bengali-700.woff2') format('woff2');
+			font-weight: 100 900;
+			font-display: swap;
+			size-adjust: 112%;
+			unicode-range: U+0951-0952, U+0964-0965, U+0980-09FE, U+1CD0-1CF9, U+200C-200D, U+20B9, U+25CC, U+A8F1;
+		}
+
+		/* the canvas HUD draws small pixel text, so its Bengali face is scaled up more */
+		@font-face {
+			font-family: 'BB Bangla Canvas';
+			src: url('src/fonts/baloo-da-2-bengali-700.woff2') format('woff2');
+			font-weight: 100 900;
+			font-display: swap;
+			size-adjust: 150%;
+			unicode-range: U+0951-0952, U+0964-0965, U+0980-09FE, U+1CD0-1CF9, U+200C-200D, U+20B9, U+25CC, U+A8F1;
+		}
+
+		@font-face {
+			font-family: 'BB Bangla Body';
+			src: url('src/fonts/baloo-da-2-bengali-600.woff2') format('woff2');
+			font-weight: 100 900;
+			font-display: swap;
+			size-adjust: 80%;
+			unicode-range: U+0951-0952, U+0964-0965, U+0980-09FE, U+1CD0-1CF9, U+200C-200D, U+20B9, U+25CC, U+A8F1;
+		}
+
+		/* Layout: one arcade cabinet column. The stage keeps 16:9 and menus float over it (below it on narrow portrait phones). */
+		:root {
+			--night: #0d0b14;
+			--night-2: #1b1726;
+			--ink: #f4ecd8;
+			--ink-dim: #b8ad97;
+			--ember: #f5b041;
+			--indigo: #818cf8;
+			--easy: #86efac;
+			--hard: #ff6b6b;
+			--panel: rgba(13, 11, 20, 0.84);
+			--display: 'Press Start 2P', 'BB Bangla Display', 'Courier New', monospace;
+			--body: 'VT323', 'BB Bangla Body', 'Courier New', monospace;
+			color-scheme: dark;
+		}
+
+		* {
+			box-sizing: border-box;
+		}
+
+		[hidden] {
+			display: none !important;
+		}
+
+		html,
+		body {
+			height: 100%;
+		}
+
+		body {
+			margin: 0;
+			background: radial-gradient(ellipse at 50% 0%, #241c33 0%, var(--night) 60%) fixed, var(--night);
+			color: var(--ink);
+			font-family: var(--body);
+			font-size: 20px;
+			touch-action: manipulation;
+		}
+
+		.app {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 12px;
+			padding-inline: 16px;
+			padding-block: 16px;
+			min-height: 100%;
+		}
+
+		.stage {
+			position: relative;
+			width: min(100%, 1024px, calc((100dvh - 150px) * 16 / 9));
+			min-width: min(100%, 320px);
+		}
+
+		.stage>canvas {
+			display: block;
+			width: 100%;
+			height: auto;
+			aspect-ratio: 16 / 9;
+			image-rendering: pixelated;
+			border: 3px solid var(--ink);
+			box-shadow: 8px 8px 0 #000, 0 0 60px rgba(245, 176, 65, 0.12);
+			outline: none;
+			background: #000;
+		}
+
+		/* ---- panels ---- */
+		.panel {
+			position: absolute;
+			inset: 3px;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 14px;
+			padding: 16px;
+			text-align: center;
+			overflow-y: auto;
+		}
+
+		.panel.dim {
+			background: var(--panel);
+		}
+
+		.logo {
+			margin: 0;
+			font-family: var(--display);
+			font-size: clamp(22px, 5vw, 52px);
+			line-height: 1.15;
+			letter-spacing: 0.04em;
+			text-shadow: 4px 4px 0 #000, -2px -2px 0 rgba(129, 140, 248, 0.7);
+			text-wrap: balance;
+		}
+
+		.logo span {
+			color: var(--ember);
+		}
+
+		.tag {
+			margin: 0;
+			color: var(--ink-dim);
+			font-size: clamp(18px, 2.2vw, 24px);
+		}
+
+		.levels {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: center;
+			gap: 14px;
+		}
+
+		.btn {
+			--shadow: var(--ember);
+			font-family: var(--display);
+			font-size: 12px;
+			letter-spacing: 0.06em;
+			color: var(--ink);
+			background: var(--night);
+			border: 3px solid var(--ink);
+			box-shadow: 5px 5px 0 var(--shadow);
+			padding: 12px 16px;
+			cursor: pointer;
+			transition: transform 0.08s, box-shadow 0.08s;
+		}
+
+		.btn:hover {
+			transform: translate(-2px, -2px);
+			box-shadow: 7px 7px 0 var(--shadow);
+		}
+
+		.btn:active {
+			transform: translate(3px, 3px);
+			box-shadow: 2px 2px 0 var(--shadow);
+		}
+
+		.btn:focus-visible,
+		.chip:focus-visible {
+			outline: 3px dashed var(--ember);
+			outline-offset: 4px;
+		}
+
+		.level {
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+			width: 190px;
+			padding: 14px 12px;
+			text-align: left;
+		}
+
+		.level b {
+			font-weight: normal;
+			font-size: 14px;
+		}
+
+		.level small {
+			font-family: var(--body);
+			font-size: 19px;
+			line-height: 1;
+			letter-spacing: 0;
+			color: var(--ink-dim);
+		}
+
+		.level[data-level="easy"] {
+			--shadow: var(--easy);
+		}
+
+		.level[data-level="medium"] {
+			--shadow: var(--ember);
+		}
+
+		.level[data-level="hard"] {
+			--shadow: var(--hard);
+		}
+
+		.btn.ghost {
+			--shadow: var(--indigo);
+			font-size: 10px;
+		}
+
+		.panel h2 {
+			margin: 0;
+			font-family: var(--display);
+			font-size: clamp(22px, 5vw, 44px);
+			text-shadow: 4px 4px 0 #000;
+		}
+
+		.panel h2[data-win="true"] {
+			color: var(--ember);
+		}
+
+		.panel h2[data-win="false"] {
+			color: var(--hard);
+		}
+
+		.panel p {
+			margin: 0;
+			font-size: 24px;
+		}
+
+		.row {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 14px;
+			justify-content: center;
+		}
+
+
+		/* ---- character select (sized to the arena, so it scales with it) ---- */
+		.stage {
+			container-type: inline-size;
+		}
+
+		.panel.select {
+			background: rgba(13, 11, 20, 0.9);
+			justify-content: flex-start;
+			gap: 1.4cqw;
+			padding: 1.6cqw 2cqw;
+		}
+
+		.sel-head {
+			display: flex;
+			align-items: center;
+			gap: 2cqw;
+			width: 100%;
+		}
+
+		.sel-head h2 {
+			flex: 1;
+			font-size: clamp(11px, 1.7cqw, 18px);
+			text-align: left;
+			text-wrap: balance;
+		}
+
+		.sel-body {
+			display: grid;
+			grid-template-columns: auto minmax(0, 1fr);
+			gap: 2.4cqw;
+			align-items: start;
+			width: 100%;
+		}
+
+		.sel-grid {
+			display: grid;
+			grid-template-columns: repeat(3, 11.5cqw);
+			grid-template-rows: repeat(2, auto);
+			gap: 1.2cqw;
+			touch-action: pan-y;
+		}
+
+		.tile {
+			--tile: var(--ember);
+			position: relative;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 0.5cqw;
+			padding: 0.4cqw 0 0.6cqw;
+			background: var(--night-2);
+			border: 2px solid #3a3350;
+			color: var(--ink-dim);
+			font-family: var(--display);
+			font-size: clamp(7px, 1cqw, 11px);
+			cursor: pointer;
+		}
+
+		.tile canvas {
+			width: 100%;
+			aspect-ratio: 1;
+			image-rendering: pixelated;
+			display: block;
+		}
+
+		.tile:hover,
+		.tile.focus {
+			border-color: var(--tile);
+			color: var(--ink);
+			box-shadow: 0 0 0 2px var(--tile) inset, 4px 4px 0 var(--tile);
+		}
+
+		.tile:focus-visible {
+			outline: 3px dashed var(--ember);
+			outline-offset: 3px;
+		}
+
+		.tile.picked {
+			background: #2a2140;
+		}
+
+		.tile .badge {
+			position: absolute;
+			top: 0.3cqw;
+			left: 0.3cqw;
+			font-style: normal;
+			font-size: clamp(6px, 0.8cqw, 9px);
+			color: var(--night);
+			background: var(--ember);
+			padding: 2px 4px;
+		}
+
+		.tile .badge:empty {
+			display: none;
+		}
+
+		.sel-card {
+			--tile: var(--ember);
+			display: grid;
+			grid-template-columns: 13cqw minmax(0, 1fr);
+			gap: 0.6cqw 1.6cqw;
+			text-align: left;
+			min-width: 0;
+		}
+
+		#sel-preview {
+			grid-row: span 2;
+			width: 13cqw;
+			aspect-ratio: 1;
+			image-rendering: pixelated;
+			background: radial-gradient(circle at 50% 70%, color-mix(in srgb, var(--tile) 35%, transparent), transparent 70%);
+			border-bottom: 3px solid var(--tile);
+		}
+
+		.sel-info {
+			min-width: 0;
+		}
+
+		.sel-info h3 {
+			margin: 0;
+			font-family: var(--display);
+			font-size: clamp(12px, 2cqw, 22px);
+			color: var(--tile);
+			text-shadow: 3px 3px 0 #000;
+		}
+
+		.sel-title {
+			margin: 0.4cqw 0 0;
+			font-size: clamp(16px, 2cqw, 22px);
+			color: var(--ink);
+		}
+
+		.sel-blurb {
+			margin: 0.4cqw 0 0;
+			font-size: clamp(15px, 1.8cqw, 20px);
+			line-height: 1.05;
+			color: var(--ink-dim);
+		}
+
+		.sel-stats,
+		.sel-moves {
+			margin: 0;
+			display: grid;
+			grid-template-columns: auto minmax(0, 1fr);
+			gap: 0.2cqw 1.2cqw;
+			align-content: start;
+			font-size: clamp(15px, 1.75cqw, 20px);
+		}
+
+		.sel-stats dt,
+		.sel-moves dt {
+			color: var(--ink-dim);
+		}
+
+		.sel-stats dd,
+		.sel-moves dd {
+			margin: 0;
+			min-width: 0;
+		}
+
+		.sel-stats dd {
+			display: flex;
+			gap: 0.35cqw;
+			align-items: center;
+		}
+
+		.sel-stats b {
+			width: 1.3cqw;
+			height: 1.1cqw;
+			min-width: 7px;
+			min-height: 6px;
+			background: #2c2640;
+		}
+
+		.sel-stats b.on {
+			background: var(--tile);
+		}
+
+		.sel-moves {
+			grid-column: 1 / -1;
+			padding-top: 0.6cqw;
+			border-top: 2px solid #2c2640;
+		}
+
+		.sel-moves dd {
+			color: var(--ink);
+		}
+
+		.quote {
+			margin: 0;
+			max-width: 34em;
+		}
+
+		/* ---- story ---- */
+		.story-btn {
+			--shadow: #ff6b6b;
+			display: flex;
+			flex-direction: column;
+			gap: 6px;
+			padding: 14px 24px;
+		}
+
+		.story-btn b {
+			font-weight: normal;
+			font-size: clamp(13px, 1.8vw, 18px);
+		}
+
+		.story-btn small {
+			font-family: var(--body);
+			font-size: 19px;
+			letter-spacing: 0;
+			color: var(--ink-dim);
+		}
+
+		.quick-btn {
+			--shadow: var(--ember);
+		}
+
+		#story p {
+			max-width: 34em;
+		}
+
+		.panel.dialogue {
+			justify-content: flex-end;
+			align-items: stretch;
+			padding: 1.6cqw;
+			background: linear-gradient(transparent 55%, rgba(13, 11, 20, 0.55));
+			cursor: pointer;
+		}
+
+		#dlg-skip {
+			position: absolute;
+			top: 1.4cqw;
+			right: 1.4cqw;
+		}
+
+		.dlg-box {
+			display: flex;
+			gap: 1.6cqw;
+			align-items: flex-start;
+			text-align: left;
+			background: rgba(13, 11, 20, 0.93);
+			border: 3px solid var(--ink);
+			box-shadow: 6px 6px 0 #000;
+			padding: 1.4cqw 1.8cqw;
+			min-height: 11cqw;
+		}
+
+		.panel.dialogue[data-who="boss"] .dlg-box {
+			flex-direction: row-reverse;
+		}
+
+		.panel.dialogue[data-who="narrator"] .dlg-box {
+			justify-content: center;
+			text-align: center;
+		}
+
+		#dlg-portrait {
+			width: 9cqw;
+			min-width: 64px;
+			aspect-ratio: 1;
+			image-rendering: pixelated;
+			background: #1b1726;
+			border: 2px solid #3a3350;
+			flex: none;
+		}
+
+		.dlg-text {
+			display: flex;
+			flex-direction: column;
+			gap: 0.6cqw;
+			min-width: 0;
+			flex: 1;
+		}
+
+		.panel.dialogue[data-who="boss"] .dlg-text {
+			text-align: right;
+		}
+
+		.dlg-text b {
+			font-family: var(--display);
+			font-weight: normal;
+			font-size: clamp(10px, 1.3cqw, 14px);
+		}
+
+		.dlg-text p {
+			margin: 0;
+			font-size: clamp(18px, 2.4cqw, 28px);
+			line-height: 1.1;
+			color: var(--ink);
+			min-height: 2.2em;
+		}
+
+		.dlg-hint {
+			font-size: 16px;
+			color: var(--ink-dim);
+		}
+
+		.tile.locked {
+			filter: saturate(0.2);
+		}
+
+		.tile.locked span {
+			color: #6b6380;
+		}
+
+		.tile.shake {
+			animation: shake 0.3s;
+		}
+
+		@keyframes shake {
+			25% {
+				transform: translateX(-4px);
+			}
+
+			75% {
+				transform: translateX(4px);
+			}
+		}
+
+		.sel-card.is-locked .sel-stats,
+		.sel-card.is-locked .sel-moves {
+			visibility: hidden;
+		}
+
+		.arena-sub {
+			font-family: var(--display);
+			font-size: clamp(9px, 1.1cqw, 12px);
+			color: var(--ember);
+		}
+
+		.arena-grid {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: center;
+			gap: 2.4cqw;
+			width: 100%;
+		}
+
+		.arena-card {
+			display: flex;
+			flex-direction: column;
+			gap: 0.8cqw;
+			width: min(100%, 30cqw);
+			padding: 0.8cqw;
+			background: var(--night-2);
+			border: 3px solid #3a3350;
+			color: var(--ink);
+			cursor: pointer;
+			text-align: left;
+			box-shadow: 5px 5px 0 #000;
+		}
+
+		.arena-card canvas {
+			width: 100%;
+			aspect-ratio: 16 / 9;
+			image-rendering: pixelated;
+			display: block;
+		}
+
+		.arena-card b {
+			font-family: var(--display);
+			font-weight: normal;
+			font-size: clamp(9px, 1.2cqw, 13px);
+		}
+
+		.arena-card small {
+			font-size: clamp(15px, 1.8cqw, 20px);
+			color: var(--ink-dim);
+			line-height: 1;
+		}
+
+		.arena-card:hover,
+		.arena-card:focus-visible {
+			border-color: var(--ember);
+			box-shadow: 5px 5px 0 var(--ember);
+			outline: none;
+		}
+
+		.ai-badge {
+			margin: -10px 0 0;
+			font-family: var(--display);
+			font-size: clamp(7px, 0.85vw, 9px);
+			letter-spacing: 0.2em;
+			color: #5eead4;
+			text-shadow: 0 0 12px rgba(94, 234, 212, 0.6);
+		}
+
+		.panel p.ai-line {
+			font-size: 20px;
+			color: #93c5fd;
+			max-width: 46em;
+		}
+
+		.btn.ghost.ai {
+			--shadow: #60a5fa;
+		}
+
+		.chip:disabled {
+			opacity: 0.5;
+			cursor: default;
+		}
+
+		/* Bengali: no letter spacing (it breaks joined letters) and a little more line height */
+		html[lang="bn"] * {
+			letter-spacing: 0 !important;
+		}
+
+		html[lang="bn"] .panel p,
+		html[lang="bn"] .dlg-text p,
+		html[lang="bn"] .help {
+			line-height: 1.3;
+		}
+
+		html[lang="bn"] .panel>h2 {
+			font-size: clamp(20px, 3.6vw, 34px);
+		}
+
+		html[lang="bn"] .sel-blurb {
+			line-height: 1.2;
+		}
+
+		html[lang="bn"] .level small,
+		html[lang="bn"] .story-btn small {
+			line-height: 1.25;
+		}
+
+		/* ---- fighter pages ---- */
+		.sel-left {
+			display: flex;
+			flex-direction: column;
+			gap: 0.8cqw;
+			align-items: stretch;
+		}
+
+		.sel-pager {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 1cqw;
+		}
+
+		.sel-pager .pg {
+			padding: 4px 12px;
+			font-size: 12px;
+			color: var(--ink);
+			border-color: #3a3350;
+		}
+
+		.sel-pager .pg:hover {
+			border-color: var(--ember);
+			color: var(--ember);
+		}
+
+		.sel-page {
+			font-family: var(--display);
+			font-size: clamp(8px, 1.1cqw, 12px);
+			color: var(--ember);
+		}
+
+		.sel-dots {
+			display: flex;
+			justify-content: center;
+			gap: 6px;
+		}
+
+		.sel-dots b {
+			width: 8px;
+			height: 8px;
+			background: #3a3350;
+		}
+
+		.sel-dots b.on {
+			background: var(--ember);
+		}
+
+		/* ---- settings, stats, records ---- */
+		.set-list {
+			display: grid;
+			gap: 10px;
+			width: min(100%, 640px);
+		}
+
+		.set-row {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 10px 16px;
+			flex-wrap: wrap;
+			text-align: left;
+		}
+
+		.set-name {
+			font-size: 22px;
+			color: var(--ink);
+		}
+
+		.set-opts {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 6px;
+		}
+
+		.seg {
+			font-family: var(--display);
+			font-size: 9px;
+			color: var(--ink-dim);
+			background: var(--night);
+			border: 2px solid #3a3350;
+			padding: 8px 10px;
+			cursor: pointer;
+		}
+
+		.seg:hover {
+			color: var(--ink);
+			border-color: var(--ink-dim);
+		}
+
+		.seg.on {
+			color: var(--night);
+			background: var(--ember);
+			border-color: var(--ink);
+		}
+
+		.seg:focus-visible {
+			outline: 3px dashed var(--ember);
+			outline-offset: 3px;
+		}
+
+		.panel p.set-note {
+			font-size: 18px;
+			color: var(--ink-dim);
+		}
+
+		.btn.danger {
+			--shadow: var(--hard);
+		}
+
+		.btn.danger[data-armed="true"] {
+			background: #4a1414;
+		}
+
+		.panel p.record {
+			font-size: 19px;
+			color: var(--ink-dim);
+		}
+
+		.panel p.unlock-line {
+			font-family: var(--display);
+			font-size: 12px;
+			color: var(--easy);
+			text-shadow: 0 0 12px rgba(134, 239, 172, 0.6);
+		}
+
+		.level.locked {
+			opacity: 0.55;
+			--shadow: #3a3350;
+		}
+
+		.level.shake {
+			animation: shake 0.3s;
+		}
+
+		.stats {
+			border-collapse: collapse;
+			font-size: 19px;
+			line-height: 1;
+			min-width: min(100%, 420px);
+		}
+
+		.stats th {
+			font-family: var(--display);
+			font-weight: normal;
+			font-size: 9px;
+			padding: 0 12px 6px;
+			color: var(--ink);
+		}
+
+		.stats td {
+			padding: 2px 12px;
+			color: var(--ink);
+		}
+
+		.stats td:first-child,
+		.stats th:first-child {
+			text-align: right;
+		}
+
+		.stats td:last-child,
+		.stats th:last-child {
+			text-align: left;
+		}
+
+		.stats .st-label {
+			color: var(--ink-dim);
+			text-align: center;
+			font-size: 17px;
+		}
+
+		.stats td.st-best {
+			color: var(--ember);
+		}
+
+		.stats tbody tr:nth-child(odd) {
+			background: rgba(255, 255, 255, 0.04);
+		}
+
+		#result,
+		#settings,
+		#story,
+		#net {
+			justify-content: safe center;
+			gap: 10px;
+		}
+
+		/* ---- Wi-Fi ---- */
+		.btn.ghost.wifi {
+			--shadow: #5eead4;
+		}
+
+		#net p {
+			max-width: 36em;
+			font-size: 21px;
+		}
+
+		.net-body {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 12px;
+			justify-content: center;
+			align-items: center;
+			width: min(100%, 680px);
+		}
+
+		.net-body:empty {
+			display: none;
+		}
+
+		.net-qr {
+			width: min(260px, 70vw, 42cqw);
+			height: auto;
+			aspect-ratio: 1;
+			image-rendering: pixelated;
+			border: 4px solid var(--ink);
+			background: #fff;
+		}
+
+		.net-code {
+			display: flex;
+			flex-direction: column;
+			gap: 6px;
+			align-items: stretch;
+			flex: 1;
+			min-width: min(100%, 220px);
+		}
+
+		.net-body textarea {
+			width: 100%;
+			font-family: var(--body);
+			font-size: 16px;
+			line-height: 1;
+			color: var(--ink);
+			background: var(--night-2);
+			border: 2px solid #3a3350;
+			padding: 6px;
+			resize: none;
+			word-break: break-all;
+		}
+
+		#net-input {
+			min-width: min(100%, 320px);
+		}
+
+		.net-addr {
+			display: flex;
+			flex-direction: column;
+			gap: 4px;
+			flex-basis: 100%;
+			text-align: left;
+			font-size: 18px;
+			color: var(--ink-dim);
+		}
+
+		.net-addr div {
+			display: flex;
+			gap: 8px;
+		}
+
+		.net-addr input {
+			flex: 1;
+			min-width: 0;
+			font-family: var(--body);
+			font-size: 18px;
+			color: var(--ink);
+			background: var(--night-2);
+			border: 2px solid #3a3350;
+			padding: 4px 6px;
+		}
+
+		#net-video {
+			width: min(100%, 360px);
+			aspect-ratio: 4 / 3;
+			object-fit: cover;
+			background: #000;
+			border: 3px solid var(--ink);
+		}
+
+		.quote p {
+			font-size: 24px;
+			color: var(--ink);
+		}
+
+		.quote footer {
+			font-size: 18px;
+			color: var(--ink-dim);
+		}
+
+		/* ---- bar under the stage ---- */
+		.bar {
+			display: flex;
+			gap: 10px;
+			flex-wrap: wrap;
+			justify-content: center;
+		}
+
+		.chip {
+			font-family: var(--display);
+			font-size: 9px;
+			color: var(--ink-dim);
+			background: transparent;
+			border: 2px solid var(--night-2);
+			padding: 8px 10px;
+			cursor: pointer;
+		}
+
+		.chip:hover {
+			color: var(--ink);
+			border-color: var(--ink-dim);
+		}
+
+		/* ---- controls help ---- */
+		.help {
+			width: min(100%, 1024px);
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
+			gap: 4px 40px;
+			color: var(--ink-dim);
+			font-size: 20px;
+		}
+
+		.help h3 {
+			grid-column: 1 / -1;
+			margin: 8px 0 4px;
+			font-family: var(--display);
+			font-size: 10px;
+			letter-spacing: 0.08em;
+			color: var(--ink);
+		}
+
+		.help dl {
+			margin: 0;
+			display: grid;
+			grid-template-columns: auto 1fr;
+			gap: 2px 14px;
+		}
+
+		.help dt {
+			color: var(--ember);
+			white-space: nowrap;
+		}
+
+		.help dd {
+			margin: 0;
+			min-width: 0;
+		}
+
+		kbd {
+			font-family: inherit;
+		}
+
+		/* ---- touch controls ---- */
+		.touch {
+			width: min(100%, 1024px);
+			display: flex;
+			justify-content: space-between;
+			align-items: flex-end;
+			gap: 12px;
+			user-select: none;
+			-webkit-user-select: none;
+			touch-action: none;
+		}
+
+		.pad,
+		.actions {
+			display: grid;
+			gap: 8px;
+		}
+
+		/* five buttons across: two for the pad, three for attacks */
+		.touch {
+			--tb: clamp(52px, calc((100vw - 32px - 12px - 40px) / 5), 84px);
+		}
+
+		.pad {
+			grid-template-columns: repeat(2, var(--tb));
+			grid-template-rows: repeat(2, var(--tb));
+		}
+
+		.actions {
+			grid-template-columns: repeat(3, var(--tb));
+			grid-template-rows: repeat(2, var(--tb));
+		}
+
+		.tb {
+			display: grid;
+			place-items: center;
+			font-family: var(--display);
+			font-size: clamp(8px, calc(var(--tb) * 0.16), 12px);
+			letter-spacing: 0;
+			white-space: nowrap;
+			padding: 0;
+			overflow: hidden;
+			color: var(--ink);
+			background: #1b1726;
+			border: 3px solid var(--ink-dim);
+			border-radius: 50%;
+			box-shadow: 0 4px 0 #000;
+			touch-action: none;
+			-webkit-tap-highlight-color: transparent;
+		}
+
+		.pad .tb {
+			border-radius: 10px;
+			font-size: clamp(16px, calc(var(--tb) * 0.32), 24px);
+		}
+
+		.tb.is-down {
+			background: var(--ember);
+			color: var(--night);
+			border-color: var(--ink);
+			transform: translateY(3px);
+			box-shadow: 0 1px 0 #000;
+		}
+
+		.tb.light {
+			border-color: var(--ink);
+		}
+
+		.tb.heavy {
+			border-color: var(--hard);
+		}
+
+		.tb.special {
+			border-color: var(--ember);
+		}
+
+		.tb.super {
+			border-color: var(--indigo);
+		}
+
+		.tb.throw {
+			border-color: #fef08a;
+		}
+
+		.pad .up {
+			grid-column: 1;
+			grid-row: 1;
+		}
+
+		.pad .down {
+			grid-column: 2;
+			grid-row: 1;
+		}
+
+		.pad .left {
+			grid-column: 1;
+			grid-row: 2;
+		}
+
+		.pad .right {
+			grid-column: 2;
+			grid-row: 2;
+		}
+
+		.touch {
+			flex-wrap: wrap;
+		}
+
+		.touch-tip {
+			flex-basis: 100%;
+			order: -1;
+			text-align: center;
+			font-size: 17px;
+			line-height: 1.1;
+			color: var(--ink-dim);
+			pointer-events: none;
+		}
+
+		body.has-touch .help {
+			display: none;
+		}
+
+		/* during a fight, swipes on the arena are for jumping, not for scrolling the page */
+		body.has-touch[data-panel=""] .stage,
+		body.has-touch:not([data-panel]) .stage {
+			touch-action: none;
+		}
+
+		/* menus are tapped directly, so hide the fight buttons while one is open */
+		body[data-panel]:not([data-panel=""]):not([data-panel="pause"]) .touch {
+			display: none !important;
+		}
+
+		/* narrow portrait phones: menus sit under the arena, buttons under that */
+		@media (max-width: 700px) and (orientation: portrait) {
+			.stage {
+				width: 100%;
+			}
+
+			.panel {
+				position: static;
+				margin-top: 12px;
+				padding: 18px 12px;
+				border: 3px solid var(--night-2);
+				background: var(--night);
+			}
+
+			.panel.dim {
+				background: var(--night);
+			}
+
+			.level {
+				width: 100%;
+			}
+
+			.levels {
+				flex-direction: column;
+				width: 100%;
+			}
+
+			.panel.select {
+				gap: 12px;
+				padding: 14px 10px;
+			}
+
+			.sel-head h2 {
+				font-size: 11px;
+			}
+
+			.sel-body {
+				grid-template-columns: 1fr;
+				gap: 14px;
+			}
+
+			.sel-grid {
+				grid-template-columns: repeat(3, minmax(0, 1fr));
+				gap: 8px;
+			}
+
+			.sel-page {
+				font-size: 10px;
+			}
+
+			.tile {
+				font-size: 9px;
+				gap: 4px;
+				padding: 3px 0 5px;
+			}
+
+			.tile .badge {
+				font-size: 7px;
+			}
+
+			.sel-card {
+				grid-template-columns: 96px minmax(0, 1fr);
+				gap: 6px 12px;
+			}
+
+			#sel-preview {
+				width: 96px;
+			}
+
+			.sel-info h3 {
+				font-size: 13px;
+			}
+
+			.sel-title {
+				font-size: 18px;
+			}
+
+			.sel-blurb {
+				font-size: 16px;
+				line-height: 1.1;
+			}
+
+			.sel-stats,
+			.sel-moves {
+				font-size: 17px;
+			}
+
+			.sel-stats b {
+				width: 12px;
+				height: 9px;
+			}
+
+			.arena-card {
+				width: 100%;
+				padding: 8px;
+				gap: 6px;
+			}
+
+			.arena-card b {
+				font-size: 11px;
+			}
+
+			.net-qr {
+				width: min(300px, 80vw);
+			}
+		}
+
+		/* phones held sideways: arena fills the height, controls float over its lower corners */
+		@media (orientation: landscape) and (max-height: 520px) {
+			.app {
+				padding-block: 6px;
+				gap: 6px;
+			}
+
+			.stage {
+				width: min(100%, calc((100dvh - 50px) * 16 / 9));
+			}
+
+			.help {
+				display: none;
+			}
+
+			/* phones held sideways: the buttons sit in the margins beside the arena, never on top of it */
+			body.has-touch {
+				--tb: clamp(48px, 13dvh, 60px);
+				--gut: calc(2 * var(--tb) + 8px + 20px + env(safe-area-inset-left, 0px));
+			}
+
+			body.has-touch .stage {
+				width: min(calc(100vw - 2 * var(--gut)), calc((100dvh - 50px) * 16 / 9));
+			}
+
+			body.has-touch .touch {
+				position: fixed;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				width: auto;
+				padding: 8px max(12px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
+				pointer-events: none;
+				--tb: inherit;
+			}
+
+			body.has-touch .touch .tb {
+				pointer-events: auto;
+			}
+
+			body.has-touch .actions {
+				grid-template-columns: repeat(2, var(--tb));
+				grid-template-rows: repeat(3, var(--tb));
+			}
+
+			body.has-touch .actions .special {
+				grid-area: 1 / 1;
+			}
+
+			body.has-touch .actions .super {
+				grid-area: 1 / 2;
+			}
+
+			body.has-touch .actions [data-action="dash"] {
+				grid-area: 2 / 1;
+			}
+
+			body.has-touch .actions .throw {
+				grid-area: 2 / 2;
+			}
+
+			body.has-touch .actions .light {
+				grid-area: 3 / 1;
+			}
+
+			body.has-touch .actions .heavy {
+				grid-area: 3 / 2;
+			}
+
+			.touch-tip {
+				display: none;
+			}
+
+			/* only the chips you need mid-fight; the rest live in Settings */
+			body.has-touch .bar {
+				max-width: calc(100vw - 2 * var(--gut));
+				gap: 6px;
+			}
+
+			body.has-touch .bar #btn-vision,
+			body.has-touch .bar #btn-forget,
+			body.has-touch .bar #btn-sound {
+				display: none;
+			}
+
+			body.has-touch .bar .chip {
+				padding: 6px 8px;
+			}
+
+			.level {
+				width: 160px;
+				padding: 10px;
+			}
+
+			.sel-blurb {
+				display: none;
+			}
+
+			.sel-title {
+				font-size: max(13px, 2cqw);
+			}
+
+			.sel-stats,
+			.sel-moves {
+				font-size: max(13px, 1.8cqw);
+				line-height: 1;
+			}
+
+			.sel-info h3 {
+				font-size: max(11px, 2cqw);
+			}
+
+			.level small {
+				display: none;
+			}
+
+			.logo {
+				font-size: 26px;
+			}
+
+			#result .quote,
+			#result .ai-line,
+			#result .record {
+				display: none;
+			}
+
+			#result,
+			#story,
+			#settings {
+				gap: 6px;
+				padding: 8px;
+			}
+
+			#result h2,
+			#story h2,
+			#settings h2 {
+				font-size: 22px;
+			}
+
+			#result p,
+			#story p {
+				font-size: 18px;
+			}
+
+			.stats {
+				font-size: 15px;
+			}
+
+			.stats th {
+				padding-bottom: 2px;
+			}
+
+			.stats td {
+				padding: 0 10px;
+			}
+
+			.stats .st-label {
+				font-size: 14px;
+			}
+
+			.set-list {
+				gap: 3px;
+			}
+
+			.set-name {
+				font-size: 17px;
+			}
+
+			.seg {
+				padding: 4px 7px;
+			}
+
+			/* the menu tagline is the first thing to go on short screens */
+			#menu .tag {
+				display: none;
+			}
+
+			#menu {
+				gap: 8px;
+				padding-block: 6px;
+			}
+
+			html[lang="bn"] .panel>h2 {
+				font-size: 20px;
+			}
+
+			html[lang="bn"] .panel p {
+				font-size: 17px;
+			}
+
+			html[lang="bn"] .set-name {
+				font-size: 15px;
+			}
+
+			html[lang="bn"] .story-btn small {
+				display: none;
+			}
+
+			/* settings in two columns, label above its options */
+			.set-list {
+				grid-template-columns: 1fr 1fr;
+				gap: 6px 22px;
+				width: 100%;
+			}
+
+			.set-row {
+				flex-direction: column;
+				align-items: flex-start;
+				gap: 2px;
+			}
+
+			html[lang="bn"] .sel-stats,
+			html[lang="bn"] .sel-moves {
+				font-size: 12px;
+				line-height: 1.15;
+			}
+
+			html[lang="bn"] .sel-title {
+				font-size: 14px;
+			}
+
+			html[lang="bn"] .sel-info h3 {
+				font-size: 13px;
+			}
+
+			html[lang="bn"] .btn {
+				padding-block: 5px;
+			}
+
+			.panel.select {
+				gap: 6px;
+				padding-block: 8px;
+			}
+
+			html[lang="bn"] #settings {
+				padding-block: 4px;
+				gap: 6px;
+			}
+
+			html[lang="bn"] .sel-dots {
+				display: none;
+			}
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			.btn {
+				transition: none;
+			}
+		}
+	</style>
+</head>
+
+<body>
+	<main class="app">
+		<div class="stage">
+			<canvas tabindex="0" aria-label="Fight arena"></canvas>
+
+			<section class="panel" id="menu" aria-labelledby="menu-title">
+				<h1 class="logo" id="menu-title">BLADE <span>&amp;</span> BLOOD</h1>
+				<p class="ai-badge" data-i18n="menu.badge">ADAPTIVE AI EDITION</p>
+				<p class="tag" data-i18n="menu.tag">The CPU studies your habits as you fight and learns to counter them.</p>
+				<button class="btn story-btn" id="btn-story" type="button"><b data-i18n="menu.story">STORY MODE</b><small
+						data-i18n="menu.story.sub">Five bosses. They learn how you fight.</small></button>
+				<button class="btn story-btn quick-btn" id="btn-quick" type="button"><b data-i18n="menu.quick">QUICK
+						MATCH</b><small data-i18n="menu.quick.sub">One fight against the CPU. Pick any fighter.</small></button>
+				<div class="row">
+					<button class="btn ghost" id="btn-pvp" data-i18n="menu.pvp">2 PLAYERS, ONE KEYBOARD</button>
+					<button class="btn ghost wifi" id="btn-wifi" data-i18n="menu.wifi">WI-FI 2 PLAYERS (QR)</button>
+					<button class="btn ghost ai" id="btn-aivai" data-i18n="menu.aivai">AI VS AI (WATCH THEM LEARN)</button>
+					<button class="btn ghost" id="btn-settings" data-i18n="menu.settings">SETTINGS</button>
+				</div>
+				<p class="record" id="menu-record" hidden></p>
+			</section>
+
+			<section class="panel" id="quick" hidden aria-labelledby="quick-title">
+				<h2 id="quick-title" data-i18n="quick.title">QUICK MATCH</h2>
+				<p class="tag" data-i18n="quick.tag">Choose how hard the CPU fights.</p>
+				<div class="levels">
+					<button class="btn level" data-level="easy"><b data-i18n="level.easy">EASY</b><small
+							data-i18n="level.easy.sub">Slow to react. Rarely blocks.</small></button>
+					<button class="btn level" data-level="medium"><b data-i18n="level.medium">MEDIUM</b><small
+							data-i18n="level.medium.sub">Blocks, punishes and combos.</small></button>
+					<button class="btn level" data-level="hard"><b>HARD</b><small>Reads you fast. Uses every
+							trick.</small></button>
+				</div>
+				<button class="btn ghost" id="quick-back" type="button" data-i18n="sel.menu">◀ Menu</button>
+			</section>
+
+			<section class="panel dim" id="settings" hidden aria-labelledby="set-title">
+				<h2 id="set-title" data-i18n="set.title">SETTINGS</h2>
+				<div class="set-list" id="set-list"></div>
+				<p class="set-note" id="set-note" hidden data-i18n="set.note">Round time and match length start with the next
+					match.</p>
+				<div class="row">
+					<button class="btn" id="set-done" type="button" data-i18n="set.done">DONE</button>
+					<button class="btn ghost danger" id="set-reset" type="button">RESET PROGRESS</button>
+				</div>
+			</section>
+
+			<section class="panel select" id="select" hidden aria-labelledby="sel-title">
+				<div class="sel-head">
+					<button class="chip" id="sel-back" type="button">◀ Menu</button>
+					<h2 id="sel-title">CHOOSE YOUR FIGHTER</h2>
+				</div>
+				<div class="sel-body">
+					<div class="sel-left">
+						<div class="sel-pager" id="sel-pager">
+							<button class="chip pg" id="sel-prev" type="button" aria-label="Previous page">◀</button>
+							<span class="sel-page" id="sel-page" aria-live="polite"></span>
+							<button class="chip pg" id="sel-next" type="button" aria-label="Next page">▶</button>
+						</div>
+						<div class="sel-grid" id="sel-grid"></div>
+						<div class="sel-dots" id="sel-dots" aria-hidden="true"></div>
+					</div>
+					<article class="sel-card" id="sel-card" aria-live="polite">
+						<canvas id="sel-preview" width="160" height="160" aria-hidden="true"></canvas>
+						<div class="sel-info">
+							<h3 id="sel-name">SAMURAI MACK</h3>
+							<p class="sel-title" id="sel-ttl">The Wandering Blade</p>
+							<p class="sel-blurb" id="sel-blurb"></p>
+						</div>
+						<dl class="sel-stats" id="sel-stats"></dl>
+						<dl class="sel-moves">
+							<dt data-i18n="sel.health">Health</dt>
+							<dd id="sel-hp">100</dd>
+							<dt data-i18n="sel.special">Special</dt>
+							<dd id="sel-special"></dd>
+							<dt data-i18n="sel.super">Ultimate</dt>
+							<dd id="sel-super"></dd>
+							<dt data-i18n="sel.passive">Passive</dt>
+							<dd id="sel-passive"></dd>
+							<dt data-i18n="sel.record">Your record</dt>
+							<dd id="sel-record"></dd>
+						</dl>
+					</article>
+				</div>
+				<button class="btn ghost" id="sel-random" type="button" data-i18n="sel.random">RANDOM FIGHTER</button>
+			</section>
+
+			<section class="panel select" id="arena" hidden aria-labelledby="arena-title">
+				<div class="sel-head">
+					<button class="chip" id="arena-back" type="button" data-i18n="sel.back">◀ Back</button>
+					<h2 id="arena-title" data-i18n="arena.title">CHOOSE THE ARENA</h2>
+					<span class="arena-sub" id="arena-sub"></span>
+				</div>
+				<div class="arena-grid" id="arena-grid"></div>
+				<button class="btn ghost" id="arena-random" type="button" data-i18n="arena.random">RANDOM ARENA</button>
+			</section>
+
+			<section class="panel dialogue" id="dialogue" hidden aria-live="polite">
+				<button class="chip" id="dlg-skip" type="button" data-i18n="dlg.skip">Skip ▶▶</button>
+				<div class="dlg-box">
+					<canvas id="dlg-portrait" width="112" height="112" aria-hidden="true"></canvas>
+					<div class="dlg-text">
+						<b id="dlg-name"></b>
+						<p id="dlg-line"></p>
+						<span class="dlg-hint" data-i18n="dlg.hint">▶ Tap or press Enter</span>
+					</div>
+				</div>
+			</section>
+
+			<section class="panel dim" id="story" hidden aria-labelledby="story-title">
+				<h2 id="story-title" data-i18n="story.title">STORY MODE</h2>
+				<p id="story-text"></p>
+				<table class="stats" id="story-stats" aria-label="Match stats" hidden></table>
+				<div class="row" id="story-buttons"></div>
+			</section>
+
+			<section class="panel dim" id="net" hidden aria-labelledby="net-title" aria-live="polite">
+				<h2 id="net-title">WI-FI 2 PLAYERS</h2>
+				<p id="net-text"></p>
+				<div class="net-body" id="net-body"></div>
+				<div class="row" id="net-buttons"></div>
+			</section>
+
+			<section class="panel dim" id="pause" hidden aria-labelledby="pause-title">
+				<h2 id="pause-title">PAUSED</h2>
+				<div class="row">
+					<button class="btn" id="btn-resume" data-i18n="pause.resume">RESUME</button>
+					<button class="btn ghost" id="btn-pause-settings" data-i18n="menu.settings">SETTINGS</button>
+					<button class="btn ghost" id="btn-quit" data-i18n="pause.quit">QUIT TO MENU</button>
+				</div>
+			</section>
+
+			<section class="panel dim" id="result" hidden aria-labelledby="result-title">
+				<h2 id="result-title">YOU WIN!</h2>
+				<p id="result-score">Rounds 2 - 1</p>
+				<p class="unlock-line" id="result-unlock" hidden></p>
+				<table class="stats" id="result-stats" aria-label="Match stats"></table>
+				<p class="ai-line" id="result-ai" hidden></p>
+				<p class="record" id="result-record" hidden></p>
+				<blockquote class="quote">
+					<p id="result-quote"></p>
+					<footer id="result-who"></footer>
+				</blockquote>
+				<div class="row">
+					<button class="btn" id="btn-rematch" data-i18n="res.rematch">REMATCH</button>
+					<button class="btn" id="btn-change" data-i18n="res.change">CHANGE FIGHTERS</button>
+					<button class="btn level-up" id="btn-harder" hidden>TRY HARD</button>
+					<button class="btn ghost" id="btn-menu" data-i18n="res.menu">MAIN MENU</button>
+				</div>
+			</section>
+		</div>
+
+		<div class="touch" id="touch" hidden>
+			<span class="touch-tip" id="touch-tip" data-i18n="touch.tip">Tip: swipe up on the left side to jump</span>
+			<div class="pad">
+				<button class="tb up" data-action="jump" aria-label="Jump">▲</button>
+				<button class="tb left" data-action="left" aria-label="Left">◀</button>
+				<button class="tb down" data-action="block" aria-label="Block">■</button>
+				<button class="tb right" data-action="right" aria-label="Right">▶</button>
+			</div>
+			<div class="actions">
+				<button class="tb special" data-action="special" data-i18n="touch.spec">SPEC</button>
+				<button class="tb super" data-action="super" data-i18n="touch.ult">ULT</button>
+				<button class="tb" data-action="dash" data-i18n="touch.dash">DASH</button>
+				<button class="tb light" data-action="light" data-i18n="touch.hit">HIT</button>
+				<button class="tb heavy" data-action="heavy" data-i18n="touch.heavy">HEAVY</button>
+				<button class="tb throw" data-action="throw" data-i18n="touch.throw">THROW</button>
+			</div>
+		</div>
+
+		<div class="bar">
+			<button class="chip" id="btn-pause" data-i18n="chip.pause">Pause (Esc)</button>
+			<button class="chip" id="btn-vision" aria-pressed="true">AI Vision: on (V)</button>
+			<button class="chip" id="btn-auto" aria-pressed="false">Autopilot: off (T)</button>
+			<button class="chip" id="btn-forget">AI memory: empty</button>
+			<button class="chip" id="btn-sound" aria-pressed="true">Sound: on</button>
+			<button class="chip" id="chip-settings" data-i18n="chip.settings">Settings</button>
+		</div>
+
+		<section class="help" aria-label="Controls">
+			<h3 data-i18n="help.p1">PLAYER 1</h3>
+			<dl>
+				<dt data-i18n-raw="help.k.move">A / D or ← / →</dt>
+				<dd data-i18n="help.move">Move</dd>
+				<dt data-i18n-raw="help.k.jump">W or ↑</dt>
+				<dd data-i18n="help.jump">Jump, press again in the air to double jump</dd>
+				<dt data-i18n-raw="help.k.block">S or ↓ (hold)</dt>
+				<dd data-i18n="help.block">Block, cuts damage to 15%</dd>
+				<dt data-i18n-raw="help.k.dash">Shift or H</dt>
+				<dd data-i18n="help.dash">Dash, dodges attacks and fireballs</dd>
+				<dt>T</dt>
+				<dd data-i18n="help.auto">Autopilot: your AI fights for you (any fight key takes over)</dd>
+				<dt>V</dt>
+				<dd data-i18n="help.vision">Show or hide AI Vision</dd>
+			</dl>
+			<dl>
+				<dt data-i18n-raw="help.k.light">J or Space</dt>
+				<dd data-i18n="help.light">Quick slash, chain them into combos</dd>
+				<dt>K</dt>
+				<dd data-i18n="help.heavy">Heavy slash, launches the opponent</dd>
+				<dt>L</dt>
+				<dd data-i18n="help.special">Special move, each fighter has their own</dd>
+				<dt>U</dt>
+				<dd data-i18n="help.super">Ultimate, needs a full power bar</dd>
+				<dt data-i18n-raw="help.k.throw">→ + K or O</dt>
+				<dd data-i18n="help.throw">Throw (close). Beats blocking. Press K when grabbed to escape</dd>
+				<dt>↓ → + J</dt>
+				<dd data-i18n="help.motion">Special move by motion</dd>
+				<dt>↓ ← + K</dt>
+				<dd data-i18n="help.breaker">Guard Break: unblockable, costs 25 power</dd>
+				<dt data-i18n-raw="help.k.parry">S or ↓ (tap)</dt>
+				<dd data-i18n="help.parry">Parry: tap just before a hit to counter</dd>
+			</dl>
+			<h3 data-i18n="help.p2">PLAYER 2 (2-player mode)</h3>
+			<dl>
+				<dt>← / →, ↑, ↓</dt>
+				<dd data-i18n="help.p2move">Move, jump, block</dd>
+				<dt>Right Shift</dt>
+				<dd data-i18n="help.p2dash">Dash</dd>
+			</dl>
+			<dl>
+				<dt>, . / '</dt>
+				<dd data-i18n="help.p2attacks">Quick, heavy, special, ultimate</dd>
+				<dt data-i18n-raw="help.k.p2throw">; or Numpad 6</dt>
+				<dd data-i18n="help.p2throw">Throw</dd>
+				<dt>Numpad 1 2 3 5</dt>
+				<dd data-i18n="help.p2numpad">Same, on a numpad</dd>
+			</dl>
+		</section>
+	</main>
+
+	<script src="src/engine/utils.js"></script>
+	<script src="src/ui/i18n.js"></script>
+	<script src="src/audio/audio.js"></script>
+	<script src="src/audio/music.js"></script>
+	<script src="src/engine/effects.js"></script>
+	<script src="src/characters/roster.js"></script>
+	<script src="src/engine/classes.js"></script>
+	<script src="src/arenas/arenas.js"></script>
+	<script src="src/engine/input.js"></script>
+	<script src="src/ai/ai.js"></script>
+	<script src="src/ai/learner.js"></script>
+	<script src="src/ai/aivision.js"></script>
+	<script src="src/ui/progress.js"></script>
+	<script src="src/ui/settings.js"></script>
+	<script src="src/ui/stats.js"></script>
+	<script src="src/ui/select.js"></script>
+	<script src="src/modes/story.js"></script>
+	<script src="src/modes/net.js"></script>
+	<script src="src/main.js"></script>
+</body>
+
+</html>
