@@ -9,6 +9,10 @@
 
 ![Gameplay](media/gameplay.gif)
 
+| Main menu | Fighter select | AI Vision |
+| --- | --- | --- |
+| ![Main menu](media/menu.png) | ![Fighter select](media/select.png) | ![AI Vision](media/fight.png) |
+
 ## Features
 
 - 10 heroes and 5 bosses, each with a special, an ultimate and a passive
