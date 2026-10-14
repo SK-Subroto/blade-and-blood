@@ -206,7 +206,7 @@ const Select = {
 			}
 		};
 		if (this.mode === 'net') {
-			title.textContent = tx('sel.net', { side: tx(Net.role === 'host' ? 'side.left' : 'side.right') });
+			title.textContent = tx(Net.kind === 'online' ? 'sel.online' : 'sel.net', { side: tx(Net.role === 'host' ? 'side.left' : 'side.right') });
 			back.textContent = tx('sel.leave');
 			clearBadges();
 		} else if (this.mode === 'story') {

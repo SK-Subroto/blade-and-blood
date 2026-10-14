@@ -282,6 +282,7 @@ function saveAIMemory() {
 
 function goToMenu() {
 	if (Net.role) Net.leave();
+	if (Online.room) Online.closeRoom();
 	Game.story = null;
 	enemy.scripted = null;
 	enemy.silhouette = false;
@@ -1267,6 +1268,12 @@ function openQuickMatch() {
 	pick.focus({ preventScroll: true });
 }
 
+// multiplayer: same keyboard, Wi-Fi (QR codes) or online (room code)
+function openMultiplayer() {
+	showPanel('multi');
+	document.getElementById('btn-pvp').focus({ preventScroll: true });
+}
+
 // menu: lock Hard until Medium is beaten, show the win record
 function updateMenuProgress() {
 	const hard = document.querySelector('#quick [data-level="hard"]');
@@ -1367,10 +1374,29 @@ function setupUI() {
 		Sound.click();
 		Story.open();
 	});
+	document.getElementById('btn-multi').addEventListener('click', () => {
+		Sound.init();
+		Sound.click();
+		openMultiplayer();
+	});
+	document.getElementById('multi-back').addEventListener('click', () => {
+		Sound.click();
+		goToMenu();
+	});
+	document.getElementById('multi').addEventListener('keydown', (e) => {
+		if (e.key !== 'Escape') return;
+		e.stopPropagation();
+		goToMenu();
+	});
 	document.getElementById('btn-pvp').addEventListener('click', () => {
 		Sound.init();
 		Sound.click();
 		Select.open('pvp', Game.level);
+	});
+	document.getElementById('btn-online').addEventListener('click', () => {
+		Sound.init();
+		Sound.click();
+		OnlineUI.open();
 	});
 	document.getElementById('btn-resume').addEventListener('click', togglePause);
 	document.getElementById('btn-quit').addEventListener('click', goToMenu);
@@ -1450,6 +1476,12 @@ if (location.hash.startsWith('#join=')) {
 	const code = location.hash.slice(6);
 	history.replaceState(null, '', location.pathname + location.search);
 	NetUI.fromLink(code);
+}
+// opened from a shared online room link: join that room
+if (location.hash.startsWith('#room=')) {
+	const code = location.hash.slice(6);
+	history.replaceState(null, '', location.pathname + location.search);
+	OnlineUI.fromLink(code);
 }
 document.fonts?.load(`16px ${FONT}`).finally(() => requestAnimationFrame(frame));
 if (!document.fonts) requestAnimationFrame(frame);

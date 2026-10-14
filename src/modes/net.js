@@ -6,17 +6,24 @@
 //
 // Netcode: lockstep. Both devices run the same game, frame by frame, with the same inputs
 // and the same random numbers, so the fight is identical on both. Each device sends its
-// input for frame N + NET_DELAY, and only runs frame N once both inputs for N are in. On the
-// same Wi-Fi a 3-frame delay (50 ms) hides the network. Every 30 frames the host sends a
-// checksum; if the guest ever drifts (different browsers can round maths slightly
-// differently) it asks for the host's state and both resume from it.
+// input for frame N + delay, and only runs frame N once both inputs for N are in. The host
+// pings the guest while they pick fighters and chooses the delay from that: 3 frames (50 ms)
+// on the same Wi-Fi, more over the internet. Every 30 frames the host sends a checksum; if
+// the guest ever drifts (different browsers can round maths slightly differently) it asks
+// for the host's state and both resume from it.
+//
+// Online play (online.js) uses the same match code: it only replaces the QR codes with a
+// room in Firebase, and can carry the messages through Firebase when a direct connection fails.
 //
 // The learning AI is off here: both fighters are people.
 
 const NET_ACTIONS = ['left', 'right', 'jump', 'block', 'light', 'heavy', 'special', 'super', 'dash', 'throw'];
-const NET_DELAY = 3;
-const NET_VERSION = 1;
+const NET_DELAY = 3; // the smallest input delay, in frames
+const NET_MAX_DELAY = 24; // 400 ms: enough for the Firebase relay on a slow route
+const NET_VERSION = 2;
 const NET_HASH_EVERY = 30;
+const NET_SILENT_MS = 30000; // nothing from the other side for this long: they're gone
+const NET_ICE = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }, { urls: 'stun:stun.cloudflare.com:3478' }];
 
 function b64url(bytes) {
 	let s = '';
@@ -107,7 +114,11 @@ const Net = {
 	pc: null,
 	dc: null,
 	role: null, // 'host' (left fighter) | 'guest' (right fighter)
+	kind: 'wifi', // 'wifi' (QR codes) | 'online' (Firebase room)
 	connected: false,
+	delay: NET_DELAY,
+	rtts: [],
+	onPeerFailed: null, // set while online play is still trying a direct connection
 	active: false, // a lockstep match is running
 	cfg: { rt: 60, rw: 2, sp: 1 },
 	picks: [null, null],
@@ -142,9 +153,11 @@ const Net = {
 	// ---------- connecting ----------
 	newPeer() {
 		this.close(true);
-		const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+		const pc = new RTCPeerConnection({ iceServers: NET_ICE });
 		pc.onconnectionstatechange = () => {
-			if (['failed', 'closed'].includes(pc.connectionState) && pc === this.pc) this.lost();
+			if (!['failed', 'closed'].includes(pc.connectionState) || pc !== this.pc) return;
+			if (this.onPeerFailed) this.onPeerFailed();
+			else this.lost();
 		};
 		this.pc = pc;
 		return pc;
@@ -162,29 +175,34 @@ const Net = {
 			});
 		});
 	},
-	async host() {
+	// full: send every network address (online play has no QR size limit, and the internet
+	// address can come after the first six)
+	describe(pc, full) {
+		return full ? { sdp: pc.localDescription.sdp } : compactSdp(pc.localDescription.sdp);
+	},
+	async host(full = false) {
 		this.role = 'host';
 		const pc = this.newPeer();
 		this.bind(pc.createDataChannel('duel', { ordered: true }));
 		await pc.setLocalDescription(await pc.createOffer());
 		await this.gathered(pc);
-		return packCode(Object.assign({ v: NET_VERSION }, compactSdp(pc.localDescription.sdp)));
+		return packCode(Object.assign({ v: NET_VERSION }, this.describe(pc, full)));
 	},
 	async acceptAnswer(code) {
 		const o = await unpackCode(code);
 		if (o.v !== NET_VERSION || !o.a) throw new Error(tx('net.notAnswer'));
 		await this.pc.setRemoteDescription({ type: 'answer', sdp: expandSdp(o) });
 	},
-	async join(code) {
+	async join(code, full = false) {
 		const o = await unpackCode(code);
-		if (o.v !== NET_VERSION || o.a) throw new Error(tx('net.notHost'));
+		if (o.v !== NET_VERSION || o.a) throw new Error(tx(o.v !== NET_VERSION && !o.a ? 'net.versionText' : 'net.notHost'));
 		this.role = 'guest';
 		const pc = this.newPeer();
 		pc.ondatachannel = (e) => this.bind(e.channel);
 		await pc.setRemoteDescription({ type: 'offer', sdp: expandSdp(o) });
 		await pc.setLocalDescription(await pc.createAnswer());
 		await this.gathered(pc);
-		return packCode(Object.assign({ v: NET_VERSION, a: 1 }, compactSdp(pc.localDescription.sdp)));
+		return packCode(Object.assign({ v: NET_VERSION, a: 1 }, this.describe(pc, full)));
 	},
 	// Opened at localhost (or from the file), this page's own address means nothing to another
 	// device, so the QR link would go nowhere. The host can type this computer's Wi-Fi address.
@@ -226,11 +244,14 @@ const Net = {
 	joinUrl(code) {
 		return `${this.savedBase || this.baseUrl}#join=${code}`;
 	},
+	// dc is a WebRTC data channel, or online play's Firebase relay (same shape)
 	bind(dc) {
 		this.dc = dc;
 		dc.onopen = () => {
 			this.connected = true;
 			this.send({ t: 'hello', v: NET_VERSION });
+			this.startBeat();
+			if (this.kind === 'online') Online.opened(dc);
 			NetUI.connected();
 		};
 		dc.onclose = () => dc === this.dc && this.lost();
@@ -242,6 +263,7 @@ const Net = {
 	close(quiet = false) {
 		this.active = false;
 		this.connected = false;
+		this.stopBeat();
 		const dc = this.dc;
 		const pc = this.pc;
 		this.dc = null;
@@ -254,24 +276,78 @@ const Net = {
 			/* already closed */
 		}
 	},
+	// (the online room is closed before the role is cleared: host and guest close it differently)
 	leave() {
 		if (this.dc) this.send({ t: 'bye' });
 		this.close(true);
+		if (this.kind === 'online') Online.closeRoom();
 		this.role = null;
 	},
 	lost() {
 		if (!this.pc && !this.dc) return;
 		const wasPlaying = this.active || Game.mode === 'net';
 		this.close(true);
+		if (this.kind === 'online') Online.closeRoom();
 		this.role = null;
 		if (wasPlaying || document.body.dataset.panel === 'net' || Select.mode === 'net') NetUI.lost();
 	},
 
+	// ---------- ping and heartbeat ----------
+	// Every half second the host pings while the players are in the menus (that sets the input
+	// delay), and every 2 s both sides send a small "still here". Only when nothing at all has
+	// come from the other side for 30 s is the connection lost: a short drop (a phone changing
+	// networks, a few seconds in another app) just pauses the game until it's back.
+	startBeat() {
+		this.stopBeat();
+		this.rtts = [];
+		this.lastHeard = this.lastBeat = performance.now();
+		let n = 0;
+		this.beat = setInterval(() => {
+			if (!this.connected) return this.stopBeat();
+			const now = performance.now();
+			// this page itself was paused (the phone was in another app): wait for the
+			// messages that piled up meanwhile before judging the other side
+			if (now - this.lastBeat > 5000) this.lastHeard = now;
+			this.lastBeat = now;
+			if (this.role === 'host' && !this.active) this.send({ t: 'ping', at: now });
+			if (++n % 4 === 0) this.send({ t: 'k' });
+			if (now - this.lastHeard > NET_SILENT_MS) this.lost();
+		}, 500);
+	},
+	stopBeat() {
+		clearInterval(this.beat);
+		this.beat = null;
+	},
+	get ping() {
+		if (!this.rtts.length) return null;
+		// a high sample rather than the average, so one slow moment doesn't stall the fight
+		const sorted = this.rtts.slice().sort((a, b) => a - b);
+		return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.8))];
+	},
+	// enough frames to cover the trip one way, plus two for jitter
+	pickDelay(speed) {
+		const rtt = this.ping;
+		if (rtt === null) return NET_DELAY;
+		const frames = Math.ceil(rtt / 2 / (1000 / 60 / speed)) + 2;
+		return Math.max(NET_DELAY, Math.min(NET_MAX_DELAY, frames));
+	},
+
 	// ---------- lobby ----------
 	onMessage(m) {
+		this.lastHeard = performance.now();
 		switch (m.t) {
 			case 'hello':
 				if (m.v !== NET_VERSION) NetUI.message(tx('net.version'), tx('net.versionText'), [[tx('res.menu'), goToMenu, '']]);
+				else if (this.kind === 'online') Online.heard(this.dc);
+				break;
+			case 'k':
+				break; // "still here"
+			case 'ping':
+				this.send({ t: 'pong', at: m.at });
+				break;
+			case 'pong':
+				this.rtts.push(performance.now() - m.at);
+				if (this.rtts.length > 10) this.rtts.shift();
 				break;
 			case 'pick':
 				this.picks[1] = m.k;
@@ -289,7 +365,7 @@ const Net = {
 				break;
 			case 'resync':
 				if (this.role === 'host' && this.active && this.snapAt === null) {
-					this.snapAt = this.frame + NET_DELAY + 4;
+					this.snapAt = this.frame + this.delay + 4;
 					this.send({ t: 'snapAt', f: this.snapAt });
 				}
 				break;
@@ -337,6 +413,7 @@ const Net = {
 			rt: Settings.get('roundTime'),
 			rw: Settings.get('roundsToWin'),
 			sp: Settings.get('speed'),
+			d: this.pickDelay(Settings.get('speed')),
 		};
 		this.send(m);
 		this.beginMatch(m);
@@ -344,6 +421,7 @@ const Net = {
 	beginMatch(m) {
 		this.lastStart = m;
 		this.cfg = { rt: m.rt, rw: m.rw, sp: m.sp };
+		this.delay = m.d || NET_DELAY;
 		this.myWant = this.theirWant = null;
 		this.startLockstep(m.seed);
 		startMatch('net', 'medium', m.k[0], m.k[1], m.arena);
@@ -373,10 +451,10 @@ const Net = {
 	startLockstep(seed) {
 		this.active = true;
 		this.frame = 0;
-		this.localNext = NET_DELAY;
+		this.localNext = this.delay;
 		this.local = new Map();
 		this.remote = new Map();
-		for (let f = 0; f < NET_DELAY; f++) {
+		for (let f = 0; f < this.delay; f++) {
 			this.local.set(f, 0);
 			this.remote.set(f, 0);
 		}
@@ -422,7 +500,7 @@ const Net = {
 	},
 	// run one frame if both inputs are in; false means waiting for the other device
 	advance() {
-		while (this.localNext <= this.frame + NET_DELAY) {
+		while (this.localNext <= this.frame + this.delay) {
 			const b = this.sample();
 			this.local.set(this.localNext, b);
 			this.send({ t: 'i', f: this.localNext, b });
@@ -528,13 +606,20 @@ const NetUI = {
 		return document.getElementById(id);
 	},
 	// title, text, and buttons as [label, fn, class]; extra parts are optional
-	message(title, text, buttons, { qr = null, code = null, input = null, video = false, address = false } = {}) {
+	message(title, text, buttons, { qr = null, room = null, code = null, copyLabel = null, input = null, field = null, video = false, address = false } = {}) {
 		this.stopScan();
 		this.el('net-title').textContent = title;
 		this.el('net-text').textContent = text;
 		const body = this.el('net-body');
 		body.innerHTML = '';
 		if (qr) body.append(this.qrCanvas(qr));
+		if (room) {
+			const big = document.createElement('p');
+			big.className = 'net-room';
+			big.textContent = room;
+			big.setAttribute('aria-label', txRaw('online.codeAria', { code: room.split('').join(' ') }));
+			body.append(big);
+		}
 		if (code) {
 			const box = document.createElement('div');
 			box.className = 'net-code';
@@ -546,7 +631,8 @@ const NetUI = {
 			const copy = document.createElement('button');
 			copy.type = 'button';
 			copy.className = 'chip';
-			copy.textContent = tx('net.copy');
+			const label = copyLabel || tx('net.copy');
+			copy.textContent = label;
 			copy.addEventListener('click', async () => {
 				try {
 					await navigator.clipboard.writeText(code);
@@ -555,7 +641,7 @@ const NetUI = {
 					document.execCommand && document.execCommand('copy');
 				}
 				copy.textContent = tx('net.copied');
-				setTimeout(() => (copy.textContent = tx('net.copy')), 1500);
+				setTimeout(() => (copy.textContent = label), 1500);
 			});
 			box.append(ta, copy);
 			body.append(box);
@@ -568,6 +654,26 @@ const NetUI = {
 			ta.placeholder = input;
 			ta.setAttribute('aria-label', input);
 			body.append(ta);
+		}
+		// one short line (a room code); Enter presses the first button
+		if (field) {
+			const inp = document.createElement('input');
+			inp.id = 'net-field';
+			inp.className = 'net-field';
+			inp.type = 'text';
+			inp.maxLength = 12;
+			inp.autocomplete = 'off';
+			inp.spellcheck = false;
+			inp.setAttribute('autocapitalize', 'characters');
+			inp.placeholder = field;
+			inp.setAttribute('aria-label', field);
+			inp.addEventListener('input', () => (inp.value = inp.value.toUpperCase()));
+			inp.addEventListener('keydown', (e) => {
+				if (e.key !== 'Enter') return;
+				e.preventDefault();
+				this.el('net-buttons').firstChild?.click();
+			});
+			body.append(inp);
 		}
 		if (video) {
 			const v = document.createElement('video');
@@ -591,7 +697,8 @@ const NetUI = {
 			row.append(b);
 		});
 		showPanel('net');
-		row.firstChild && row.firstChild.focus({ preventScroll: true });
+		const first = field ? this.el('net-field') : row.firstChild;
+		first && first.focus({ preventScroll: true });
 	},
 	// host on localhost: where should the QR link point?
 	addressBox() {
@@ -649,20 +756,21 @@ const NetUI = {
 	},
 
 	async open() {
-		this.message(tx('net.title'), tx('net.checking'), [[tx('net.back'), goToMenu, 'ghost']]);
+		Net.kind = 'wifi';
+		this.message(tx('net.title'), tx('net.checking'), [[tx('net.back'), openMultiplayer, 'ghost']]);
 		const support = await Net.probe();
 		if (support !== 'ok') {
 			const why =
 				support === 'claude'
 					? tx('net.whyClaude')
 					: tx('net.whyBlocked');
-			this.message(tx('net.needsHosted'), tx('net.howHost', { why }), [[tx('net.back'), goToMenu, '']]);
+			this.message(tx('net.needsHosted'), tx('net.howHost', { why }), [[tx('net.back'), openMultiplayer, '']]);
 			return;
 		}
 		this.message(tx('net.title'), tx('net.intro'), [
 			[tx('net.host'), () => this.startHost(), ''],
 			[tx('net.join'), () => this.joinMenu(), ''],
-			[tx('net.back'), goToMenu, 'ghost'],
+			[tx('net.back'), openMultiplayer, 'ghost'],
 		]);
 	},
 
@@ -732,13 +840,15 @@ const NetUI = {
 	},
 	// arrived from a scanned link: join right away
 	async fromLink(code) {
+		Net.kind = 'wifi';
 		const support = await Net.probe();
 		if (support !== 'ok') return this.open();
 		this.useOffer(code);
 	},
 
 	connected() {
-		this.message(tx('net.connected'), tx(Net.role === 'host' ? 'net.youLeft' : 'net.youRight'), []);
+		const side = tx(Net.role === 'host' ? 'net.youLeft' : 'net.youRight');
+		this.message(tx('net.connected'), Net.dc && Net.dc.relay ? `${side} ${tx('online.relayNote')}` : side, []);
 		Sound.fight();
 		setTimeout(() => Net.connected && Net.openSelect(), 1100);
 	},
@@ -748,7 +858,7 @@ const NetUI = {
 			startDemo();
 		}
 		Music.play('title');
-		this.message(tx('net.lost'), tx('net.lostText'), [[tx('res.menu'), goToMenu, '']]);
+		this.message(tx('net.lost'), tx(Net.kind === 'online' ? 'online.lostText' : 'net.lostText'), [[tx('res.menu'), goToMenu, '']]);
 	},
 	cancel() {
 		Net.leave();

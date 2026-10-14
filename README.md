@@ -18,7 +18,7 @@
 - 10 heroes and 5 bosses, each with a special, an ultimate and a passive
 - Story mode: five bosses who remember your habits
 - A CPU that learns your patterns and counters them
-- 2 players on one keyboard, or on two devices over Wi-Fi (QR codes)
+- 2 players on one keyboard, over Wi-Fi (QR codes), or online with a room code
 - AI vs AI mode and an AI Vision overlay (press V)
 - English and Bengali (বাংলা), touch controls on phones
 

@@ -211,6 +211,7 @@
 		.level b {
 			font-weight: normal;
 			font-size: 14px;
+			line-height: 1.35;
 		}
 
 		.level small {
@@ -482,6 +483,22 @@
 
 		.quick-btn {
 			--shadow: var(--ember);
+		}
+
+		.multi-btn {
+			--shadow: var(--indigo);
+		}
+
+		.level[data-mp="local"] {
+			--shadow: var(--ember);
+		}
+
+		.level[data-mp="wifi"] {
+			--shadow: #5eead4;
+		}
+
+		.level[data-mp="online"] {
+			--shadow: var(--indigo);
 		}
 
 		#story p {
@@ -937,6 +954,35 @@
 
 		#net-input {
 			min-width: min(100%, 320px);
+		}
+
+		/* online: the room code, big enough to read out loud */
+		.panel p.net-room {
+			flex-basis: 100%;
+			font-family: var(--display);
+			font-size: clamp(28px, 6vw, 48px);
+			letter-spacing: 0.25em;
+			color: var(--ember);
+			text-shadow: 4px 4px 0 #000;
+		}
+
+		.net-field {
+			width: min(100%, 300px);
+			font-family: var(--display);
+			font-size: 22px;
+			letter-spacing: 0.25em;
+			text-align: center;
+			text-transform: uppercase;
+			color: var(--ink);
+			background: var(--night-2);
+			border: 3px solid var(--ink-dim);
+			padding: 10px 8px;
+		}
+
+		.net-field:focus {
+			outline: 3px dashed var(--ember);
+			outline-offset: 3px;
+			border-color: var(--ink);
 		}
 
 		.net-addr {
@@ -1551,13 +1597,27 @@
 						data-i18n="menu.story.sub">Five bosses. They learn how you fight.</small></button>
 				<button class="btn story-btn quick-btn" id="btn-quick" type="button"><b data-i18n="menu.quick">QUICK
 						MATCH</b><small data-i18n="menu.quick.sub">One fight against the CPU. Pick any fighter.</small></button>
+				<button class="btn story-btn multi-btn" id="btn-multi" type="button"><b data-i18n="menu.multi">MULTIPLAYER</b><small
+						data-i18n="menu.multi.sub">Same keyboard, Wi-Fi or online.</small></button>
 				<div class="row">
-					<button class="btn ghost" id="btn-pvp" data-i18n="menu.pvp">2 PLAYERS, ONE KEYBOARD</button>
-					<button class="btn ghost wifi" id="btn-wifi" data-i18n="menu.wifi">WI-FI 2 PLAYERS (QR)</button>
 					<button class="btn ghost ai" id="btn-aivai" data-i18n="menu.aivai">AI VS AI (WATCH THEM LEARN)</button>
 					<button class="btn ghost" id="btn-settings" data-i18n="menu.settings">SETTINGS</button>
 				</div>
 				<p class="record" id="menu-record" hidden></p>
+			</section>
+
+			<section class="panel" id="multi" hidden aria-labelledby="multi-title">
+				<h2 id="multi-title" data-i18n="multi.title">MULTIPLAYER</h2>
+				<p class="tag" data-i18n="multi.tag">Choose how you play together.</p>
+				<div class="levels">
+					<button class="btn level" id="btn-pvp" data-mp="local" type="button"><b data-i18n="multi.local">SAME KEYBOARD</b><small
+							data-i18n="multi.local.sub">Two players on one computer.</small></button>
+					<button class="btn level" id="btn-wifi" data-mp="wifi" type="button"><b data-i18n="multi.wifi">WI-FI (QR)</b><small
+							data-i18n="multi.wifi.sub">Two devices on the same Wi-Fi.</small></button>
+					<button class="btn level" id="btn-online" data-mp="online" type="button"><b data-i18n="multi.online">ONLINE</b><small
+							data-i18n="multi.online.sub">Play a friend anywhere with a room code.</small></button>
+				</div>
+				<button class="btn ghost" id="multi-back" type="button" data-i18n="sel.menu">◀ Menu</button>
 			</section>
 
 			<section class="panel" id="quick" hidden aria-labelledby="quick-title">
@@ -1787,6 +1847,7 @@
 	<script src="src/ui/select.js"></script>
 	<script src="src/modes/story.js"></script>
 	<script src="src/modes/net.js"></script>
+	<script src="src/modes/online.js"></script>
 	<script src="src/main.js"></script>
 </body>
 

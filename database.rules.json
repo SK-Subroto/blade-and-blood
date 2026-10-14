@@ -1,0 +1,21 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "$code": {
+        ".read": "$code.matches(/^[A-HJ-NP-Z2-9]{6}$/)",
+        ".write": "$code.matches(/^[A-HJ-NP-Z2-9]{6}$/) && (data.exists() || !newData.exists() || newData.hasChildren(['v', 't']))",
+        "v": { ".validate": "newData.isNumber()" },
+        "t": { ".validate": "newData.isNumber() && newData.val() <= now && (!data.exists() || data.val() === newData.val() || data.val() < now - 10800000)" },
+        "offer": { ".validate": "newData.isString() && newData.val().length < 8000 && !data.exists()" },
+        "answer": { ".validate": "newData.isString() && newData.val().length < 8000 && !data.exists()" },
+        "guest": { ".validate": "newData.isBoolean()" },
+        "relay": { ".validate": "newData.isBoolean()" },
+        "h": { "$msg": { ".validate": "newData.hasChildren(['s', 'm']) && newData.child('s').isNumber() && newData.child('m').isString() && newData.child('m').val().length < 12000" } },
+        "g": { "$msg": { ".validate": "newData.hasChildren(['s', 'm']) && newData.child('s').isNumber() && newData.child('m').isString() && newData.child('m').val().length < 12000" } },
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}
