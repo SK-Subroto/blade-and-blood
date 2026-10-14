@@ -251,6 +251,7 @@ const Net = {
 			this.connected = true;
 			this.send({ t: 'hello', v: NET_VERSION });
 			this.startBeat();
+			Chat.setAvailable(true);
 			if (this.kind === 'online') Online.opened(dc);
 			NetUI.connected();
 		};
@@ -264,6 +265,7 @@ const Net = {
 		this.active = false;
 		this.connected = false;
 		this.stopBeat();
+		Chat.setAvailable(false);
 		const dc = this.dc;
 		const pc = this.pc;
 		this.dc = null;
@@ -342,6 +344,9 @@ const Net = {
 				break;
 			case 'k':
 				break; // "still here"
+			case 'chat':
+				Chat.receive(m.c);
+				break;
 			case 'ping':
 				this.send({ t: 'pong', at: m.at });
 				break;

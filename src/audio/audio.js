@@ -133,4 +133,12 @@ const Sound = {
 	click() {
 		this.tone({ freq: 700, to: 1000, type: 'square', dur: 0.06, vol: 0.08 });
 	},
+	// quick chat: a short blip when you send, a brighter two-note pop when the other player does
+	chatSend() {
+		this.tone({ freq: 880, to: 1175, type: 'square', dur: 0.07, vol: 0.07 });
+	},
+	chatGet() {
+		this.tone({ freq: 988, to: 1319, type: 'square', dur: 0.08, vol: 0.1 });
+		this.tone({ freq: 1319, to: 1760, type: 'square', dur: 0.1, vol: 0.1, delay: 0.09 });
+	},
 };

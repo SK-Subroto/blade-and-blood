@@ -1299,6 +1299,7 @@ function onLanguageChanged() {
 	document.getElementById('btn-sound').textContent = tx(Sound.enabled ? 'chip.soundOn' : 'chip.soundOff');
 	document.getElementById('pause-title').textContent = tx(Game.mode === 'net' && Net.active ? 'pause.online' : 'pause.title');
 	Select.refresh();
+	Chat.refresh();
 	if (Select.focusKey) Select.show(Select.focusKey);
 	if (document.body.dataset.panel === 'settings') document.querySelector('#set-list .seg[data-key="language"].on')?.focus({ preventScroll: true });
 }
@@ -1464,6 +1465,7 @@ function setupUI() {
 	if (Progress.data.settings.swipeSeen) document.getElementById('touch-tip').hidden = true;
 	setupKeyboard(() => (Game.state !== 'demo' ? Game.mode : 'cpu'), togglePause);
 	Select.build();
+	Chat.build();
 }
 
 setupUI();
@@ -1471,17 +1473,17 @@ startDemo();
 showPanel('menu');
 updateMenuProgress();
 Music.play('title');
-// opened from a scanned Wi-Fi QR code: join that game
-if (location.hash.startsWith('#join=')) {
-	const code = location.hash.slice(6);
+// opened from a scanned Wi-Fi QR code (#join=) or a shared online room link (#room=): join it.
+// Also when the link is opened in a tab that already has the game, which doesn't reload the page.
+function joinFromLink() {
+	const m = /^#(join|room)=(.+)$/.exec(location.hash);
+	if (!m) return;
 	history.replaceState(null, '', location.pathname + location.search);
-	NetUI.fromLink(code);
+	if (Net.role || Online.room) return; // already in a Wi-Fi or online game
+	if (m[1] === 'join') NetUI.fromLink(m[2]);
+	else OnlineUI.fromLink(m[2]);
 }
-// opened from a shared online room link: join that room
-if (location.hash.startsWith('#room=')) {
-	const code = location.hash.slice(6);
-	history.replaceState(null, '', location.pathname + location.search);
-	OnlineUI.fromLink(code);
-}
+joinFromLink();
+window.addEventListener('hashchange', joinFromLink);
 document.fonts?.load(`16px ${FONT}`).finally(() => requestAnimationFrame(frame));
 if (!document.fonts) requestAnimationFrame(frame);

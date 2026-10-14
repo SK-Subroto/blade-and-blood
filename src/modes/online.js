@@ -15,6 +15,10 @@
 //
 // The Firebase SDK is only downloaded when someone opens Online.
 
+// This is a Firebase *web* config: it identifies the project and is meant to be public (every
+// visitor's browser receives it). It grants no access by itself. The database is protected by
+// database.rules.json, and the API key only works from the game's own sites (set in Google
+// Cloud console > APIs & Services > Credentials > "Browser key (auto created by Firebase)").
 const FIREBASE_CONFIG = {
 	apiKey: 'AIzaSyAy8o9OQQDt8IRyfpWcl4FK4fQAb0IOmeY',
 	authDomain: 'blade-and-blood-84ac0.firebaseapp.com',

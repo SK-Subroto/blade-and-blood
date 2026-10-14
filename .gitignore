@@ -19,6 +19,16 @@ public/
 # Node, in case tooling is added later
 node_modules/
 
+# Secrets: never commit these (service-account keys, private keys, env files)
+.env
+.env.*
+*service-account*.json
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+*.pem
+*.key
+*.p12
+
 # Logs and temporary files
 *.log
 *.tmp

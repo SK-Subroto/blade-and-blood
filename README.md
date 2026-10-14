@@ -19,6 +19,7 @@
 - Story mode: five bosses who remember your habits
 - A CPU that learns your patterns and counters them
 - 2 players on one keyboard, over Wi-Fi (QR codes), or online with a room code
+- Quick chat in Wi-Fi and online matches: taunts like "HAHAHA!" and "GG!" pop up on both screens (keys 1-8)
 - AI vs AI mode and an AI Vision overlay (press V)
 - English and Bengali (বাংলা), touch controls on phones
 
